@@ -43,7 +43,7 @@ To compile: gcc -g3 -O0 -o afterburner afterburner.c
 #include <stdbool.h>
 #include "serial_port.h"
 
-#define VERSION "v.0.6.1"
+#define VERSION "v.0.6.2"
 
 #ifdef GCOM
 #define VERSION_EXTENDED VERSION "-" GCOM
@@ -54,12 +54,6 @@ To compile: gcc -g3 -O0 -o afterburner afterburner.c
 #define MAX_LINE   (16*1024)
 #define MAXFUSES   (30000)
 #define GALBUFSIZE (31 * 1024)
-
-#define JTAG_ID 0xFF
-
-// Return-values for functions
-#define RETV_ERROR (true)
-#define RETV_OK    (false)
 
 #define MIN_CAL_OFFSET (-32) /* Min. calibration offset in [E-2 V] */
 #define MAX_CAL_OFFSET  (32) /* Max. calibration offset in [E-2 V] */
@@ -141,16 +135,7 @@ bool     checkArgs(int16_t argc, char** argv);
 uint16_t checkSum(uint16_t n);
 int16_t  parseFuseMap(char *ptr);
 bool     readFile(int16_t* fileSize);
-bool     checkForString(char* buf, int16_t start, const char* key);
-bool     openSerial(void);
-void     closeSerial(void);
-int16_t  checkPromptExists(char* buf, int16_t bufSize);
-char*    stripPrompt(char* buf);
 char*    findLastLine(char* buf);
-char*    printBuffer(char* bufPrint, int16_t readSize);
-int16_t  waitForSerialPrompt(char* buf, int16_t bufSize, int16_t maxDelay);
-bool     sendBuffer(char* buf);
-bool     sendLine(char* buf, int16_t bufSize, int16_t maxDelay);
 void     updateProgressBar(char* label, int16_t current, int16_t total);
 bool     upload(void);
 bool     sendGenericCommand(const char* command, const char* errorText, int16_t maxDelay, bool printResult);
@@ -165,11 +150,5 @@ bool     operationSecureGal();
 bool     operationWritePes(void);
 bool     operationEraseGal(void);
 bool     operationReadFuses(void);
-int16_t  readJtagSerialLine(char* buf, int16_t bufSize, int16_t maxDelay, int16_t * feedRequest);
-bool     playJtagFile(char* label, int16_t fSize, int16_t vpp, int16_t showProgress);
-bool     processJtagInfo(void);
-bool     processJtagErase(void);
-bool     processJtagWrite(void);
-bool     processJtag(void);
 
 #endif /* _AFTERBURNER_H_ */

@@ -5,6 +5,7 @@
 #include <errno.h>
 #include "afterburner.h"
 #include "serial_port.h"
+#include "aftb_jtag.h"
 
 /* GAL info */
 _str_galinfo galinfo[] = {
@@ -32,10 +33,8 @@ _str_galinfo galinfo[] = {
 
 bool  verbose    = false;
 char* filename   = NULL;
-char* deviceName = NULL;
 char* pesString  = NULL;
 
-SerialDeviceHandle serialF = INVALID_HANDLE;
 Galtype  gal;
 int16_t  security = 0;
 uint16_t checksum;
@@ -45,20 +44,22 @@ bool     noGalCheck = false;
 bool     varVppExists = false;
 bool     printSerialWhileWaiting = false;
 int16_t  calOffset = 0;  //no calibration offset is applied
-bool     bigRam = false; // 'BIG-RAM found
 
 bool opRead         = false; /* read fuse map and display */
 bool opWrite        = false; /* write fuse map */
 bool opErase        = false; /* erase GAL chip */
-char opInfo         = false; /* read device info */
-char opVerify       = false; /* verify fuse map */
-char opTestVPP      = false; /* set Vpp on to check voltage */
-char opCalibrateVPP = false; /* calibrate Vpp on new board design */
-char opMeasureVPP   = false; /* measure Vpp on new board design */
-char opSecureGal    = false; /* -sec: enable security */
-char opWritePes     = false; /* write PES */
-char flagEraseAll   = true;  /* erase all data including PES */
+bool opInfo         = false; /* read device info */
+bool opVerify       = false; /* verify fuse map */
+bool opTestVPP      = false; /* set Vpp on to check voltage */
+bool opCalibrateVPP = false; /* calibrate Vpp on new board design */
+bool opMeasureVPP   = false; /* measure Vpp on new board design */
+bool opSecureGal    = false; /* -sec: enable security */
+bool opWritePes     = false; /* write PES */
+bool flagEraseAll   = true;  /* erase all data including PES */
 char flagEnableApd  = 0;
+
+extern SerialDeviceHandle serialF; /* defined in serial_port.c */
+extern char* deviceName;
 
 void printGalTypes(void) {
     int16_t i;
@@ -487,115 +488,6 @@ bool readFile(int16_t* fileSize) {
     return RETV_OK;
 } // readFile()
 
-bool checkForString(char* buf, int16_t start, const char* key) {
-    int16_t labelPos = strstr(buf + start, key) -  buf;
-    return (labelPos > 0 && labelPos < 500);
-} // checkForString()
-
-bool openSerial(void) {
-    char     buf[512] = {'\0'};
-    char     devName[256] = {'\0'};
-    int16_t  total;
-    int16_t  labelPos;
-
-    //open device name
-    if (deviceName == NULL) {
-        serialDeviceGuessName(&deviceName);
-    }
-    snprintf(devName, sizeof(devName), "%s", (deviceName == NULL) ? DEFAULT_SERIAL_DEVICE_NAME : deviceName);
-    serialDeviceCheckName(devName, sizeof(devName));
-
-    if (verbose) {
-        printf("opening serial: %s\n", devName);
-    } // if
-
-    serialF = serialDeviceOpen(devName);
-    if (serialF == INVALID_HANDLE) {
-        printf("Error: failed to open serial device: %s\n", devName);
-        return RETV_ERROR;
-    } // if
-
-    // prod the programmer to output it's identification
-    sprintf(buf, "*\r");
-    serialDeviceWrite(serialF, buf, 2);
-
-    //read programmer's message
-    total = waitForSerialPrompt(buf, 512, 3000);
-    buf[total] = 0;
-
-    //check we are communicating with Afterburner programmer
-    labelPos = strstr(buf, "AFTerburner v.") -  buf;
-
-    bigRam = false;
-    if ((labelPos >= 0) && (labelPos < 500) && (buf[total - 3] == '>')) {
-        // check for new board desgin: variable VPP
-        varVppExists = checkForString(buf, labelPos, " varVpp ");
-        if (verbose && varVppExists) {
-            printf("variable VPP board detected\n");
-        }
-        // check for Big Ram
-        bigRam = checkForString(buf, labelPos, " RAM-BIG");
-        if (verbose && bigRam) {
-            printf("MCU Big RAM detected\n");
-        } // if
-        return RETV_OK; // all OK
-    } // if
-    if (verbose) {
-        printf("Output from programmer not recognised: %s\n", buf);
-    } // if
-    serialDeviceClose(serialF);
-    serialF = INVALID_HANDLE;
-    return RETV_ERROR;
-} // openSerial()
-
-void closeSerial(void) {
-    if (serialF == INVALID_HANDLE) {
-        return;
-    } // if
-    serialDeviceClose(serialF);
-    serialF = INVALID_HANDLE;
-} // closeSerial()
-
-int16_t checkPromptExists(char* buf, int16_t bufSize) {
-    int16_t i;
-    for (i = 0; (i < bufSize - 2) && (buf[i] != '\0'); i++) {
-        if ((buf[i] == '>') && (buf[i+1] == '\r') && (buf[i+2] == '\n')) {
-            return i;
-        } // if
-    } // for
-    return -1;
-} // int16_t
-
-char* stripPrompt(char* buf) {
-    int16_t len, i;
-    if (buf == NULL) {
-        return '\0';
-    } // if
-    len = strlen(buf);
-    i   = checkPromptExists(buf, len);
-    if (i >= 0) {
-        buf[i] = '\0';
-        len    = i;
-    } // if
-
-    //strip rear new line characters
-    for (i = len - 1; i >= 0; i--) {
-        if ((buf[i] != '\r') && (buf[i] != '\n')) {
-            break;
-        } else {
-            buf[i] = '\0';
-        } // else
-    } // for i
-
-    //strip frontal new line characters
-    for (i = 0; buf[i] != '\0'; i++) {
-        if (buf[0] == '\r' || buf[0] == '\n') {
-            buf++;
-        } // if
-    } // for i
-    return buf;
-} // stripPrompt()
-
 // finds beginnig of the last line
 char* findLastLine(char* buf) {
     int16_t   i;
@@ -611,112 +503,6 @@ char* findLastLine(char* buf) {
     } // for i
     return result;
 } // findLastLine()
-
-char* printBuffer(char* bufPrint, int16_t readSize) {
-    int16_t  i;
-    bool doPrint = true;
-    for (i = 0; i < readSize; i++) {
-        if (*bufPrint == '>') {
-            doPrint = false;
-        } // if
-        if (doPrint) {
-            printf("%c", *bufPrint);
-            if (*bufPrint == '\n' || *bufPrint == '\r') {
-                fflush(stdout);
-            } // if
-            bufPrint++;
-        } // if
-    } // for i
-    return bufPrint;
-} // printBuffer()
-
-int16_t waitForSerialPrompt(char* buf, int16_t bufSize, int16_t maxDelay) {
-    char*   bufStart = buf;
-    int16_t bufTotal = bufSize;
-    int16_t bufPos = 0;
-    int16_t readSize;
-    char*   bufPrint = buf;
-    bool    doPrint = printSerialWhileWaiting;
-    
-    memset(buf, 0, bufSize);
-    while (maxDelay > 0) {
-        readSize = serialDeviceRead(serialF, buf, bufSize);
-        if (readSize > 0) {
-            bufPos += readSize;
-            if (checkPromptExists(bufStart, bufTotal) >= 0) {
-                maxDelay = 4; //force exit, but read the rest of the line
-            } else {
-                buf += readSize;
-                bufSize -= readSize;
-                if (bufSize <= 0) {
-                    printf("ERROR: serial port read buffer is too small!\nAre you dumping large amount of data?\n");
-                    return -1;
-                } // if
-            } // else
-            if (printSerialWhileWaiting) {
-                bufPrint = printBuffer(bufPrint, readSize);
-            } // if
-        } // if
-        if (maxDelay > 0) {
-        /* WIN_API handles timeout itself */
-#ifndef _USE_WIN_API_
-            usleep(10 * 1000);
-            maxDelay -= 10;
-#else
-            maxDelay -= 30;           
-#endif
-            if ((maxDelay <= 0) && verbose) {
-                printf("waitForSerialPrompt timed out\n");
-            } // if
-        } // if
-    } // while
-    return bufPos;
-} // WaitForSerialPrompt()
-
-bool sendBuffer(char* buf) {
-    int16_t total;
-    int16_t writeSize;
-
-    if (buf == NULL) {
-        return RETV_ERROR;
-    }
-    total = strlen(buf);
-    // write the query into the serial port's file
-    // file is opened non blocking so we have to ensure all contents is written
-    while (total > 0) {
-        writeSize = serialDeviceWrite(serialF, buf, total);
-        if (writeSize < 0) {
-            printf("ERROR: written: %i (%s)\n", writeSize, strerror(errno));
-            return RETV_ERROR;
-        }
-        buf += writeSize;
-        total -= writeSize;
-    }
-    return RETV_OK;
-} // sendBuffer()
-
-bool sendLine(char* buf, int16_t bufSize, int16_t maxDelay) {
-    int16_t total;
-    char* obuf = buf;
-
-    if (serialF == INVALID_HANDLE) {
-        return RETV_ERROR;
-    }
-    if (sendBuffer(buf) != RETV_OK) {
-        return RETV_ERROR;
-    }
-
-    total = waitForSerialPrompt(obuf, bufSize, (maxDelay < 0) ? 6 : maxDelay);
-    if (total < 0) {
-        return RETV_ERROR;
-    }
-    obuf[total] = 0;
-    obuf        = stripPrompt(obuf);
-    if (verbose) {
-        printf("read: %i '%s'\n", total, obuf);
-    } // if
-    return total;
-} // sendLine()
 
 void updateProgressBar(char* label, int16_t current, int16_t total) {
     int16_t done = ((current + 1) * 40) / total;
@@ -751,7 +537,7 @@ bool upload(void) {
     sprintf(buf, "#t %c %s\r", '0' + (int16_t) gal, galinfo[gal].name);
     sendLine(buf, MAX_LINE, 300);
 
-    //fuse map
+    // fuse map
     buf[0]  = 0;
     fuseSet = 0;
     
@@ -780,10 +566,8 @@ bool upload(void) {
                 fuseSet = 1;
             }
         }
-
         sprintf(line, "%02X", f);
         strcat(buf, line);
-
         updateProgressBar("", i, totalFuses);
     }
     updateProgressBar("", totalFuses, totalFuses);
@@ -796,7 +580,6 @@ bool upload(void) {
 #endif
         sendLine(buf, MAX_LINE, 100);
     }
-
     csum = checkSum(totalFuses); //checksum
     if (verbose) {
         printf("sending csum: %04X\n", csum);
@@ -1115,288 +898,6 @@ bool operationReadFuses(void) {
     return RETV_OK;
 } // operationReadFuses()
 
-int16_t readJtagSerialLine(char* buf, int16_t bufSize, int16_t maxDelay, int16_t * feedRequest) {
-    char*   bufStart = buf;
-    int16_t readSize;
-    int16_t bufPos = 0;
-
-    memset(buf, 0, bufSize);
-
-    while (maxDelay > 0) {
-        readSize = serialDeviceRead(serialF, buf, 1);
-        if (readSize > 0) {
-            bufPos += readSize;
-            buf[1] = 0;
-            //handle the feed request
-            if (buf[0] == '$') {
-                char tmp[5];
-                bufPos -= readSize;
-                buf[0] = 0;
-                //extra 5 bytes should be present: 3 bytes of size, 2 new line chars
-                readSize = serialDeviceRead(serialF, tmp, 3);
-                if (readSize == 3) {
-                    int16_t retry = 1000;
-                    tmp[3] = 0;
-                    *feedRequest = atoi(tmp);
-                    maxDelay = 0; //force exit
-
-                    //read the extra 2 characters (new line chars)
-                    while (retry && readSize != 2) {
-                        readSize = serialDeviceRead(serialF, tmp, 2);
-                        retry--;
-                    }
-                    if (readSize != 2 || tmp[0] != '\r' || tmp[1] != '\n') {
-                        printf("Warning: corrupted feed request ! %d \n", readSize);
-                    }
-                } else {
-                    printf("Warning: corrupted feed request! %d \n", readSize);
-                }
-                //printf("***\n");
-            } else
-            if (buf[0] == '\r') {
-                readSize = serialDeviceRead(serialF, buf, 1); // read \n coming from Arduino
-                //printf("-%c-\n", buf[0] == '\n' ? 'n' : 'r');
-                buf[0] = 0;
-                bufPos++;
-                maxDelay = 0; //force exit
-            } else {
-                //printf("(0x%02x %d) \n", buf[0], (int16_t) buf[0]);
-                buf += readSize;
-                if (bufPos == bufSize) {
-                    printf("ERROR: serial port read buffer is too small!\nAre you dumping large amount of data?\n");
-                    return -1;
-                }
-            }
-        }
-        if (maxDelay > 0) {
-        /* WIN_API handles timeout itself */
-#ifndef _USE_WIN_API_
-            usleep(1 * 1000);
-            maxDelay -= 10;
-#else
-            maxDelay -= 30;
-#endif
-        }
-    }
-    return bufPos;
-} // readJtagSerialLine()
-
-bool playJtagFile(char* label, int16_t fSize, int16_t vpp, int16_t showProgress) {
-    char     buf[MAX_LINE] = {'\0'};
-    int16_t  sendPos = 0;
-    int16_t  lastSendPos = 0;
-    char     ready = 0;
-    int16_t  result = 0;
-    uint16_t csum = 0;
-    int16_t  feedRequest = 0;
-    // support for XCOMMENT messages which might be interrupted by a feed request
-    int16_t  continuePrinting = 0;
-
-    if (openSerial() != RETV_OK) {
-        return RETV_ERROR;
-    }
-    //compute check sum
-    if (verbose) {
-        int16_t i;
-        for (i = 0; i < fSize; i++) {
-            csum += (unsigned char) galbuffer[i];
-        } // for 
-    } // if
-
-    // send start-JTAG-player command
-    sprintf(buf, "j%d\r", vpp ? 1: 0);
-    sendBuffer(buf);
-
-    // read response from MCU and feed the XSVF player with data
-    while(1) {
-        int16_t readBytes;
-
-        feedRequest = 0;
-        buf[0] = 0;
-        readBytes = readJtagSerialLine(buf, MAX_LINE, 3000, &feedRequest);
-        //printf(">> read %d  len=%d cp=%d '%s'\n", readBytes, (int16_t) strlen(buf), continuePrinting,  buf);
-
-        //request to send more data was received
-        if (feedRequest > 0) {
-            if (ready) {
-                int16_t chunkSize = fSize - sendPos;
-                if (chunkSize > feedRequest) {
-                    chunkSize = feedRequest;
-                    // make the initial chunk big so the data are buffered by the OS
-                    if (sendPos == 0) {
-                        chunkSize *= 2;
-                        if (chunkSize > fSize) {
-                            chunkSize = fSize;
-                        } // if
-                    } // if
-                } // if
-                if (chunkSize > 0) {
-                    // send the data over serial line
-                    int16_t w = serialDeviceWrite(serialF, galbuffer + sendPos, chunkSize);
-                    sendPos += w;
-                    // print progress / file position
-                    if (showProgress && (sendPos - lastSendPos >= 1024 || sendPos == fSize)) {
-                        lastSendPos = sendPos;
-                        updateProgressBar(label, sendPos, fSize);
-                    } // if
-               } // if
-            } // if
-            if (readBytes > 2) {
-                continuePrinting = 1;
-            } // if
-        } // if
-        // when the feed request was detected, there might be still some data in the buffer
-        if (buf[0] != 0) {
-            //prevous line had a feed request - this is a continuation
-            if (feedRequest == 0 && continuePrinting) {
-                continuePrinting = 0;
-                printf("%s\n", buf);
-            } else
-            //print debug messages
-            if (buf[0] == 'D') {
-                if (feedRequest) { // the rest of the message will follow
-                    printf("%s", buf + 1);
-                } else {
-                    printf("%s\n", buf + 1);
-               } // else 
-            } // if
-            // quit
-            if (buf[0] == 'Q') {
-                result = atoi(buf + 1);
-                //print error result
-                if (result != 0) {
-                    printf("%s\n", buf + 1);
-                } else
-                // when all is OK and verbose mode is on, then print the checksum for comparison
-                if (verbose) {
-                    printf("PC : 0x%08X\n", csum);
-                }
-                break;
-            } else
-            // ready to receive announcement
-            if (strcmp("RXSVF", buf) == 0) {
-                ready = 1;
-            } else
-            // print important messages
-            if (buf[0] == '!') {
-                // in verbose mode print all messages, otherwise print only success or fail messages
-                if (verbose || !strcmp("!Success", buf) || !strcmp("!Fail", buf)) {
-                    printf("%s\n", buf + 1);
-                } // if
-            } // if
-#if 0
-             //print all the rest
-             else if (verbose) {
-                printf("'%s'\n", buf);
-            } // else if
-#endif
-        } else
-        // the buffer is empty but there was a feed request just before - print a new line
-        if (readBytes > 0 && continuePrinting) {
-            printf("\n");
-            continuePrinting = 0;
-        } // if
-    } // while
-    readJtagSerialLine(buf, MAX_LINE, 1000, &feedRequest);
-    closeSerial();
-	if (!result)
-		 return RETV_ERROR;
-	else return RETV_OK;
-} // playJtagFile()
-
-bool processJtagInfo(void) {
-    bool    result;
-    int16_t fSize = 0;
-    char    tmp[256];
-
-    if (!opInfo) {
-        return RETV_OK;
-    } // if
-
-    if (!(gal == ATF1502AS || gal == ATF1504AS)) {
-        printf("error: info command is unsupported");
-        return RETV_ERROR;
-    } // if
-
-    // Use default .xsvf file for erase if no file is provided.
-    // if the file is provided while write operation is also requested
-    // then the file is specified for writing -> do not use it for erasing
-    sprintf(tmp, "xsvf/id_ATF150X.xsvf");
-    filename = tmp;
-
-    if (readFile(&fSize) != RETV_OK) {
-        return RETV_ERROR;
-    } // if
-
-    //play the info file and use high VPP
-    return playJtagFile("", fSize, 1, 0);
-} // processJtagInfo()
-
-bool processJtagErase(void) {
-    int16_t fSize = 0;
-    char    tmp[256];
-    char*   originalFname = filename;
-
-    if (!opErase) {
-        return RETV_OK;
-    } // if
-    // Use default .xsvf file for erase.
-    sprintf(tmp, "xsvf/erase_%s.xsvf", galinfo[gal].name);
-    filename = tmp;
-
-    if (readFile(&fSize) != RETV_OK) {
-        filename = originalFname;
-        return RETV_ERROR;
-    } // if
-    filename = originalFname;
-
-    //play the erase file and use high VPP
-    return playJtagFile("erase ", fSize, 1, 1);
-} // processJtagErase()
-
-bool processJtagWrite(void) {
-    int16_t fSize = 0;
-
-    if (!opWrite) {
-        return RETV_OK;
-    } // if
-
-    // paranoid: this condition should be already checked during argument's check
-    if (filename == NULL) {
-        return RETV_ERROR;
-    } // if
-    if (readFile(&fSize) != RETV_OK) {
-        return RETV_ERROR;
-    } // if
-    //play the file and use low VPP
-    return playJtagFile("write ", fSize, 0, 1);
-} // processJtagWrite()
-
-bool processJtag(void) {
-
-    if (verbose) {
-        printf("JTAG\n");
-    } // if
-
-    if ((gal == ATF1502AS || gal == ATF1504AS) && (opRead || opVerify)) {
-        printf("error: read and verify operation is not supported\n");
-        return RETV_ERROR;
-    } // if
-
-    if (processJtagInfo() != RETV_OK) {
-        return RETV_ERROR;
-    } // if
-
-    if (processJtagErase() != RETV_OK) {
-        return RETV_ERROR;
-    } // if
-
-    if (processJtagWrite() != RETV_OK) {
-        return RETV_ERROR;
-    } // if
-    return RETV_OK;
-} // processJtag()
-
 int16_t main(int16_t argc, char** argv) {
     bool    result = false;
     int16_t i;
@@ -1457,4 +958,4 @@ int16_t main(int16_t argc, char** argv) {
         printf("result=%s\n", result ? "Error" : "OK!");
     }
     return result;
-} // processJtag()
+} // main()

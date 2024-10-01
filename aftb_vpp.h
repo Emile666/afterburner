@@ -2,6 +2,8 @@
  * Variable voltage functions for Afterburner GAL project.
  * 
  * 2024-02-02 Minor changes in varVppInit()
+ * 2024-02-14 Redesign of VPP measurement (function varVppMeasureVpp())
+ * 2024-09-24 Added ADC_MUL_VAL for more efficient calculation of VPP
  */
 #ifndef __AFTB_VPP_H__
 #define __AFTB_VPP_H__
@@ -29,6 +31,7 @@
 #endif
 
 #include "aftb_mcp4131.h"
+#include "aftb_adcparms.h"
 #ifndef FAIL
 #define FAIL 0
 #define OK 1
@@ -63,11 +66,6 @@
 #define ANALOG_REF_EXTERNAL AR_EXTERNAL
 #endif
 
-//UNO R4 Minima or Wifi (Aref internally pulled down by 130kOhm, AVR Uno R3 pulled down by 32kOhm)
-#ifdef _RENESAS_RA_
-#define AREF_IS_3V2
-#endif
-
 //pot wiper indices for the voltages 
 uint8_t vppWiper[MAX_WIPER] = {0};
 
@@ -98,7 +96,7 @@ static void varVppReadCalib(void) {
     calOffset = (int8_t) EEPROM.read(2);
     for (i = 0; i < MAX_WIPER; i++) {
         vppWiper[i] = EEPROM.read(i + 3);
-#if 0
+#if 1
         Serial.print(F("Calib "));
         Serial.print(i);
         Serial.print(F(":"));
@@ -163,64 +161,22 @@ static void varVppSet(uint8_t value) {
     varVppSetVppIndex(vppWiper[value]);
 }
 
-// UNO R4/Minima - Renesas IC (significant ADC gain errors measured)
-#ifdef AREF_IS_3V2
-#define SAMPLE_CNT 16
-#define SAMPLE_DIVIDER 8
-#define SAMPLE_MULTIPLIER 25
-// SAMPLE_SHIFT moves the ADC gain error up/down
-#define SAMPLE_SHIFT -45;
-
-// ESP32-S2 (VREF 2.5V)
-#elif CONFIG_IDF_TARGET_ESP32S2 == 1
-#define SAMPLE_CNT 18
-#define SAMPLE_DIVIDER 10
-#define SAMPLE_MULTIPLIER 1
-#define SAMPLE_OFFSET 5
-
-//AVR based Arduinos (no ADC gain errors measured)
-#else
-#define SAMPLE_CNT 14
-#define SAMPLE_DIVIDER 8
-#define SAMPLE_MULTIPLIER 1
-#define SAMPLE_OFFSET 5
-#endif
-
 static int16_t varVppMeasureVpp(int8_t printValue) {
-    int8_t i = 0;
-    uint16_t r1 = 0;
-    int16_t r2; //correction for ADC gain error
+    int adcsum = 0;     // Sum MCOUNT measurements here
+    int loops = 0;      // Counter for measure loop
+    float vpp;          // Vpp result as float
 
-    while (i++ < SAMPLE_CNT) {
-        r1 += analogRead(VPP);
-    }
-    r2 = (r1 / (SAMPLE_DIVIDER * SAMPLE_MULTIPLIER));
-#ifdef SAMPLE_OFFSET
-    r1+= SAMPLE_OFFSET;
-#endif    
-    r1 /= SAMPLE_DIVIDER;
-#ifdef SAMPLE_SHIFT
-    r2 += SAMPLE_SHIFT;
-    r1 += r2;
-#endif    
-    r1 += calOffset;
+    // Measure MCOUNT times and add results
+    do {
+        adcsum += analogRead(VPP);      // Sum MCOUNT measurements here
+    } while (++loops < MCOUNT);
+    // Now calculate the VPP
+    vpp  = float(adcsum) * ADC_MUL_VAL; // vpp now in [E-2 V]
+    vpp += float(calOffset);            // calOffset in [E-2 V]
     if (printValue) {
-        uint8_t a = r1%100;
-        Serial.print(r1/100);
-        Serial.print(F("."));
-        if (a < 10) {
-            Serial.print(F("0"));          
-        }
-#if 1
-        Serial.println(a);
-#else
-        //debug - display the voltage skew value in r2
-        Serial.print(a);
-        Serial.println(F(", "));
-        Serial.println(r2);
-#endif        
+        Serial.println(vpp,1);
     }
-    return r1;
+    return int16_t(vpp + 0.5);
 }
 
 // Returns 1 on Success, 0 on Failure
@@ -320,7 +276,6 @@ ret:
 
 }
 
-
 static void varVppStoreWiperCalib() {
     uint8_t i = 0;
     //sanity check
@@ -351,7 +306,6 @@ static void analogReference(uint8_t ref) {
   adc2_config_channel_atten(ADC_PIN, ADC_ATTEN_DB_11); // AREF 2.5V
 }
 #endif
-
 
 //return 1 on success (variable VPP functionality present), 0 on failure (VPP not detected on board)
 static int8_t varVppInit(void) {
@@ -415,8 +369,6 @@ static void varrVppTestRamp(void) {
     }
     delay(2000);
     varVppSetVppIndex(0);
-
-
 }
 
 static int8_t varVppCalibrate(void) {
