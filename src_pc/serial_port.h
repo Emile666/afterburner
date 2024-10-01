@@ -2,7 +2,7 @@
 #define _SERIAL_PORT_H_
 
 
-char guessedSerialDevice[512] = {0};
+char guessedSerialDevice[512] = {'\0'};
 
 #ifdef _USE_WIN_API_
 
@@ -223,7 +223,7 @@ static void serialDeviceGuessName(char** deviceName) {
                 strcpy(guessedSerialDevice, text);
                 //strip the new-line trailing markers
                 if (guessedSerialDevice[textLen - 1] == '\n' || guessedSerialDevice[textLen - 1] == '\r') {
-                    guessedSerialDevice[textLen - 1] = 0;
+                    guessedSerialDevice[textLen - 1] = '\0';
                 }
             }
         }
