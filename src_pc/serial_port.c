@@ -2,9 +2,6 @@
 #include "serial_port.h"
 
 char guessedSerialDevice[512] = {'\0'};
-#ifdef NO_CLOSE
-SerialDeviceHandle serH = INVALID_HANDLE;
-#endif
 SerialDeviceHandle serialF = INVALID_HANDLE;
 
 char* deviceName = NULL;
@@ -96,11 +93,6 @@ void serialDeviceGuessName(char** deviceName) {
 // https://www.xanthium.in/Serial-Port-Programming-using-Win32-API
 SerialDeviceHandle serialDeviceOpen(char* deviceName) {
     SerialDeviceHandle h;
-#ifdef NO_CLOSE
-    if (serH != INVALID_HANDLE) {
-        return serH;
-    }
-#endif
 #ifdef _USE_WIN_API_
     h = CreateFile(
         deviceName,                  //port name
@@ -177,10 +169,7 @@ SerialDeviceHandle serialDeviceOpen(char* deviceName) {
         tcdrain(h);
         tcflush(h, TCIOFLUSH); //flush both queues 
 #endif
-#ifdef NO_CLOSE
-        serH = h;
-#endif
-        return h;
+    return h;
     } else {
         return INVALID_HANDLE;
     }
@@ -212,9 +201,7 @@ void serialDeviceCheckName(char* name, int maxSize) {
 } // serialDeviceCheckName()
 
 void serialDeviceClose(SerialDeviceHandle deviceHandle) {
-#ifndef NO_CLOSE
     CloseHandle(deviceHandle);
-#endif
 } // serialDeviceClose()
 
 int32_t serialDeviceWrite(SerialDeviceHandle deviceHandle, char* buffer, int32_t bytesToWrite) {
@@ -270,7 +257,7 @@ bool openSerial(void) {
     serialDeviceWrite(serialF, buf, 2);
 
     //read programmer's message
-    total = waitForSerialPrompt(buf, 512, 3000);
+    total = waitForSerialPrompt(buf, 512, 8000);
     buf[total] = '\0';
 
     //check we are communicating with Afterburner programmer
@@ -306,15 +293,15 @@ void closeSerial(void) {
     serialF = INVALID_HANDLE;
 } // closeSerial()
 
-int16_t checkPromptExists(char* buf, int16_t bufSize) {
-    int16_t i;
+int32_t checkPromptExists(char* buf, int32_t bufSize) {
+    int32_t i;
     for (i = 0; (i < bufSize - 2) && (buf[i] != '\0'); i++) {
         if ((buf[i] == '>') && (buf[i+1] == '\r') && (buf[i+2] == '\n')) {
             return i;
         } // if
     } // for
     return -1;
-} // int16_t
+} // checkPromptExists()
 
 int32_t waitForSerialPrompt(char* buf, int32_t bufSize, int32_t maxDelay) {
     char*   bufStart = buf;
@@ -330,7 +317,10 @@ int32_t waitForSerialPrompt(char* buf, int32_t bufSize, int32_t maxDelay) {
         if (readSize > 0) {
             bufPos += readSize;
             if (checkPromptExists(bufStart, bufTotal) >= 0) {
-                maxDelay = 4; //force exit, but read the rest of the line
+				if (printSerialWhileWaiting) {
+					bufPrint = printBuffer(bufPrint, readSize);
+				} // if
+				return bufPos;
             } else {
                 buf += readSize;
                 bufSize -= readSize;
@@ -343,25 +333,27 @@ int32_t waitForSerialPrompt(char* buf, int32_t bufSize, int32_t maxDelay) {
                 bufPrint = printBuffer(bufPrint, readSize);
             } // if
         } // if
+
         if (maxDelay > 0) {
         /* WIN_API handles timeout itself */
 #ifndef _USE_WIN_API_
             usleep(10 * 1000);
             maxDelay -= 10;
 #else
-            maxDelay -= 30;           
+            maxDelay -= 30;
 #endif
             if ((maxDelay <= 0) && verbose) {
-                printf("waitForSerialPrompt timed out\n");
+                printf("waitForSerialPrompt timed out\n",maxDelay);
             } // if
         } // if
     } // while
     return bufPos;
 } // WaitForSerialPrompt()
 
-char* printBuffer(char* bufPrint, int16_t readSize) {
-    int16_t  i;
-    bool doPrint = true;
+char* printBuffer(char* bufPrint, int32_t readSize) {
+    int32_t  i;
+    bool     doPrint = true;
+	
     for (i = 0; i < readSize; i++) {
         if (*bufPrint == '>') {
             doPrint = false;
@@ -406,7 +398,6 @@ int32_t sendLine(char* buf, int32_t bufSize, int32_t maxDelay) {
     if (serialF == INVALID_HANDLE) {
         return -1;
     }
-	
     if (sendBuffer(buf) != RETV_OK) {
         return -1;
     }
@@ -415,7 +406,7 @@ int32_t sendLine(char* buf, int32_t bufSize, int32_t maxDelay) {
     if (total < 0) {
         return RETV_ERROR;
     }
-    obuf[total] = 0;
+    obuf[total] = '\0';
     obuf        = stripPrompt(obuf);
     if (verbose) {
         printf("read: %i '%s'\n", total, obuf);
@@ -424,7 +415,7 @@ int32_t sendLine(char* buf, int32_t bufSize, int32_t maxDelay) {
 } // sendLine()
 
 char* stripPrompt(char* buf) {
-    int16_t len, i;
+    int32_t len, i;
     if (buf == NULL) {
         return '\0';
     } // if

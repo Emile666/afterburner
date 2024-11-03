@@ -49,9 +49,9 @@ int32_t serialDeviceRead(SerialDeviceHandle deviceHandle, char* buffer, int32_t 
 bool    checkForString(char* buf, int16_t start, const char* key);
 bool    openSerial(void);
 void    closeSerial(void);
-int16_t checkPromptExists(char* buf, int16_t bufSize);
+int32_t checkPromptExists(char* buf, int32_t bufSize);
 int32_t waitForSerialPrompt(char* buf, int32_t bufSize, int32_t maxDelay);
-char*   printBuffer(char* bufPrint, int16_t readSize);
+char*   printBuffer(char* bufPrint, int32_t readSize);
 bool    sendBuffer(char* buf);
 int32_t sendLine(char* buf, int32_t bufSize, int32_t maxDelay);
 char*   stripPrompt(char* buf);

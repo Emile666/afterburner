@@ -43,7 +43,7 @@ To compile: gcc -g3 -O0 -o afterburner afterburner.c
 #include <stdbool.h>
 #include "serial_port.h"
 
-#define VERSION "v.0.6.2"
+#define VERSION "v.0.6.3"
 
 #ifdef GCOM
 #define VERSION_EXTENDED VERSION "-" GCOM

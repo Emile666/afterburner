@@ -591,7 +591,7 @@ bool upload(void) {
     return sendGenericCommand("#e\r", "Upload failed", 300, NO_PRINT); 
 } // upload()
 
-// returns 0 on success
+// returns RETV_OK on success
 bool sendGenericCommand(const char* command, const char* errorText, int32_t maxDelay, bool printResult) {
     char    buf[MAX_LINE];
     int32_t readSize;
@@ -618,7 +618,6 @@ bool sendGenericCommand(const char* command, const char* errorText, int32_t maxD
 
 bool operationWriteOrVerify(bool doWrite) {
     char    buf[MAX_LINE];
-    int16_t readSize;
     bool    result;
 
     if (readFile(NULL)) {
@@ -630,14 +629,9 @@ bool operationWriteOrVerify(bool doWrite) {
         printf("parse result=%i\n", result);
     } // if
 
-    if (openSerial() != RETV_OK) {
-        return RETV_ERROR;
-    } // if
-
     // set power-down fuse bit (do it before upload to correctly calculate check-sum)
     result = sendGenericCommand(flagEnableApd ? "z\r" : "Z\r", "APD set failed ?", 4000, NO_PRINT);
     if (result != RETV_OK) {
-		closeSerial();
         return RETV_ERROR;
     } // if
     result = upload();
@@ -649,7 +643,6 @@ bool operationWriteOrVerify(bool doWrite) {
     if (doWrite) {
         result = sendGenericCommand("w\r", "write failed ?", 8000, NO_PRINT);
         if (result != RETV_OK) {
-            closeSerial();
 			return RETV_ERROR;
         } // if
     } // if
@@ -658,7 +651,6 @@ bool operationWriteOrVerify(bool doWrite) {
     if (opVerify) {
         result = sendGenericCommand("v\r", "verify failed ?", 8000, NO_PRINT);
     } // if
-    closeSerial();
     return result;
 } // operationWriteOrVerify()
 
@@ -666,15 +658,10 @@ bool operationReadInfo(void) {
 
     bool result;
 
-    if (openSerial() != RETV_OK) {
-        return RETV_ERROR;
-    } // if
-
     if (verbose) {
         printf("sending 'p' command...\n");
     }
     result = sendGenericCommand("p\r", "info failed ?", 4000, DO_PRINT);
-    closeSerial();
     return result;
 } // operationReadInfo()
 
@@ -685,10 +672,6 @@ bool operationReadInfo(void) {
 bool operationTestVpp(void) {
 
     bool result;
-
-    if (openSerial() != RETV_OK) {
-        return RETV_ERROR;
-    } // if
 
     if (verbose) {
         printf("sending 't' command...\n");
@@ -704,7 +687,6 @@ bool operationTestVpp(void) {
     //Voltage testing takes ~20 seconds
     result = sendGenericCommand("t\r", "info failed ?", 22000, DO_PRINT);
     printSerialWhileWaiting = false;
-    closeSerial();
     return result;
 } // operationTestVpp()
 
@@ -712,10 +694,6 @@ bool operationCalibrateVpp(void) {
     bool result;
     char cmd [8] = {0};
     char val = (char)('0' + (calOffset + MAX_CAL_OFFSET));
-
-    if (openSerial() != RETV_OK) {
-        return RETV_ERROR;
-    } // if
 
     sprintf(cmd, "B%c\r", val);
     if (verbose) {
@@ -731,16 +709,11 @@ bool operationCalibrateVpp(void) {
     printSerialWhileWaiting = true;
     result = sendGenericCommand("b\r", "VPP calibration failed", 34000, DO_PRINT);
     printSerialWhileWaiting = false;
-    closeSerial();
     return result;
 } // operationCalibrateVpp()
 
 bool operationMeasureVpp(void) {
     bool result;
-
-    if (openSerial() != RETV_OK) {
-        return RETV_ERROR;
-    } // if
 
     if (verbose) {
         printf("sending 'm' command...\n");
@@ -750,61 +723,41 @@ bool operationMeasureVpp(void) {
     printSerialWhileWaiting = true;
     result = sendGenericCommand("m\r", "VPP measurement failed", 40000, DO_PRINT);
     printSerialWhileWaiting = false;
-    closeSerial();
     return result;
 } // operationMeasureVpp()
 
 bool operationSetGalCheck(void) {
-    int16_t readSize;
     bool    result;
 
-    if (openSerial() != 0) {
-        return -1;
-    } // if
-    result = sendGenericCommand(noGalCheck ? "F\r" : "f\r", "noGalCheck failed ?", 4000, NO_PRINT);
-    closeSerial();
+    result = sendGenericCommand(noGalCheck ? "F\r" : "f\r", "noGalCheck failed ?", 8000, NO_PRINT);
     return result;    
 } // operationSetGalCheck()
 
 bool operationSetGalType(Galtype type) {
     char    buf[MAX_LINE];
-    int16_t readSize;
     bool    result;
 
-    if (openSerial() != RETV_OK) {
-        return RETV_ERROR;
-    } // if
     if (verbose) {
         printf("sending 'g' command type=%i\n", type);
     } // if
     sprintf(buf, "g%c\r", '0' + (int16_t)type); 
     result = sendGenericCommand(buf, "setGalType failed ?", 4000, NO_PRINT);
-    closeSerial();
     return result;    
 } // operationSetGalType()
 
 bool operationSecureGal(void) {
-    int16_t readSize;
     bool    result;
 
-    if (openSerial() != RETV_OK) {
-        return RETV_ERROR;
-    } // if
     if (verbose) {
         printf("sending 's' command...\n");
     } // if
     result = sendGenericCommand("s\r", "secure GAL failed ?", 4000, NO_PRINT);
-    closeSerial();
     return result;
 } // operationSecureGal()
 
 bool operationWritePes(void) {
     char    buf[MAX_LINE];
     bool    result;
-
-    if (openSerial() != RETV_OK) {
-        return RETV_ERROR;
-    } // if
 
     //Switch to upload mode to specify GAL
     sprintf(buf, "u\r");
@@ -826,17 +779,12 @@ bool operationWritePes(void) {
         printf("sending 'P' command...\n");
     } // if
     result = sendGenericCommand("P\r", "write PES failed ?", 4000, NO_PRINT);
-    closeSerial();
     return result;
 } // operationWritePes()
 
 bool operationEraseGal(void) {
     char    buf[MAX_LINE];
     bool    result;
-
-    if (openSerial() != RETV_OK) {
-        return RETV_ERROR;
-    } // if
 
     //Switch to upload mode to specify GAL
     sprintf(buf, "u\r");
@@ -855,7 +803,6 @@ bool operationEraseGal(void) {
     } else {
         result = sendGenericCommand("c\r", "erase failed ?", 4000, NO_PRINT);
     } // if
-    closeSerial();
     return result;
 } // operationEraseGal()
 
@@ -864,14 +811,10 @@ bool operationReadFuses(void) {
     char*   buf = galbuffer;
     int32_t readSize;
 
-    if (openSerial() != RETV_OK) {
-        return RETV_ERROR;
-    } // if
-
     //Switch to upload mode to specify GAL
     sprintf(buf, "u\r");
     sendLine(buf, MAX_LINE, 100);
-
+	
     //set GAL type
     sprintf(buf, "#t %c\r", '0' + (int16_t) gal);
     sendLine(buf, MAX_LINE, 100);
@@ -882,13 +825,13 @@ bool operationReadFuses(void) {
 
     //READ_FUSE command
     sprintf(buf, "r\r");
-    readSize = sendLine(buf, GALBUFSIZE, 12000);
+    readSize = sendLine(buf, 32768, 12000);
     if (readSize < 0)  {
         return RETV_ERROR;
     } // if
+	printf("OK!\n");
     response = stripPrompt(buf);
     printf("%s\n", response);
-    closeSerial();
 
     if (response[0] == 'E' && response[1] == 'R') {
         return RETV_ERROR;
@@ -912,6 +855,10 @@ int16_t main(int16_t argc, char** argv) {
         result = processJtag();
     } // if
 	else {
+	    if (openSerial() != RETV_OK) {
+			return RETV_ERROR;
+		} // if
+
 		result = operationSetGalCheck();
 		if ((gal != UNKNOWN) && (result == RETV_OK)) {
 			result = operationSetGalType(gal);
@@ -955,5 +902,6 @@ int16_t main(int16_t argc, char** argv) {
     if (verbose) {
         printf("result=%s\n", result ? "Error" : "OK!");
     }
+    closeSerial();
     return result;
 } // main()
