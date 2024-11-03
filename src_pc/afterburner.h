@@ -51,9 +51,9 @@ To compile: gcc -g3 -O0 -o afterburner afterburner.c
 #define VERSION_EXTENDED VERSION
 #endif
 
-#define MAX_LINE   (16*1024)
+#define MAX_LINE   (16 * 1024)
 #define MAXFUSES   (30000)
-#define GALBUFSIZE (31 * 1024)
+#define GALBUFSIZE (256 * 1024)
 
 #define MIN_CAL_OFFSET (-32) /* Min. calibration offset in [E-2 V] */
 #define MAX_CAL_OFFSET  (32) /* Max. calibration offset in [E-2 V] */
@@ -138,7 +138,7 @@ bool     readFile(int16_t* fileSize);
 char*    findLastLine(char* buf);
 void     updateProgressBar(char* label, int16_t current, int16_t total);
 bool     upload(void);
-bool     sendGenericCommand(const char* command, const char* errorText, int16_t maxDelay, bool printResult);
+bool     sendGenericCommand(const char* command, const char* errorText, int32_t maxDelay, bool printResult);
 bool     operationWriteOrVerify(bool doWrite);
 bool     operationReadInfo(void);
 bool     operationTestVpp(void);

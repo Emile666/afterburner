@@ -43,17 +43,17 @@ SerialDeviceHandle serialDeviceOpen(char* deviceName);
 void    serialDeviceGuessName(char** deviceName);
 void    serialDeviceCheckName(char* name, int maxSize);
 void    serialDeviceClose(SerialDeviceHandle deviceHandle);
-int     serialDeviceWrite(SerialDeviceHandle deviceHandle, char* buffer, int bytesToWrite);
-int     serialDeviceRead(SerialDeviceHandle deviceHandle, char* buffer, int bytesToRead);
+int32_t serialDeviceWrite(SerialDeviceHandle deviceHandle, char* buffer, int32_t bytesToWrite);
+int32_t serialDeviceRead(SerialDeviceHandle deviceHandle, char* buffer, int32_t bytesToRead);
 
 bool    checkForString(char* buf, int16_t start, const char* key);
 bool    openSerial(void);
 void    closeSerial(void);
 int16_t checkPromptExists(char* buf, int16_t bufSize);
-int16_t waitForSerialPrompt(char* buf, int16_t bufSize, int16_t maxDelay);
+int32_t waitForSerialPrompt(char* buf, int32_t bufSize, int32_t maxDelay);
 char*   printBuffer(char* bufPrint, int16_t readSize);
 bool    sendBuffer(char* buf);
-bool    sendLine(char* buf, int16_t bufSize, int16_t maxDelay);
+int32_t sendLine(char* buf, int32_t bufSize, int32_t maxDelay);
 char*   stripPrompt(char* buf);
 
 #endif /* _SERIAL_PORT_H_ */

@@ -592,9 +592,9 @@ bool upload(void) {
 } // upload()
 
 // returns 0 on success
-bool sendGenericCommand(const char* command, const char* errorText, int16_t maxDelay, bool printResult) {
+bool sendGenericCommand(const char* command, const char* errorText, int32_t maxDelay, bool printResult) {
     char    buf[MAX_LINE];
-    int16_t readSize;
+    int32_t readSize;
 
     sprintf(buf, "%s", command);
     readSize = sendLine(buf, MAX_LINE, maxDelay);
@@ -800,8 +800,7 @@ bool operationSecureGal(void) {
 
 bool operationWritePes(void) {
     char    buf[MAX_LINE];
-    int16_t readSize;
-    char    result;
+    bool    result;
 
     if (openSerial() != RETV_OK) {
         return RETV_ERROR;
@@ -833,7 +832,6 @@ bool operationWritePes(void) {
 
 bool operationEraseGal(void) {
     char    buf[MAX_LINE];
-    int16_t readSize;
     bool    result;
 
     if (openSerial() != RETV_OK) {
@@ -864,7 +862,7 @@ bool operationEraseGal(void) {
 bool operationReadFuses(void) {
     char*   response;
     char*   buf = galbuffer;
-    int16_t readSize;
+    int32_t readSize;
 
     if (openSerial() != RETV_OK) {
         return RETV_ERROR;

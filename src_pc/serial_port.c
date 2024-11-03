@@ -217,21 +217,21 @@ void serialDeviceClose(SerialDeviceHandle deviceHandle) {
 #endif
 } // serialDeviceClose()
 
-int serialDeviceWrite(SerialDeviceHandle deviceHandle, char* buffer, int bytesToWrite) {
+int32_t serialDeviceWrite(SerialDeviceHandle deviceHandle, char* buffer, int32_t bytesToWrite) {
 #ifdef _USE_WIN_API_
     DWORD written = 0;
     WriteFile(deviceHandle, buffer, bytesToWrite, &written, NULL);
-    return (int) written;
+    return (int32_t) written;
 #else
 	return write(deviceHandle, buffer, bytesToWrite); 
 #endif
 } // serialDeviceWrite()
 
-int serialDeviceRead(SerialDeviceHandle deviceHandle, char* buffer, int bytesToRead) {
+int32_t serialDeviceRead(SerialDeviceHandle deviceHandle, char* buffer, int32_t bytesToRead) {
 #ifdef _USE_WIN_API_
     DWORD read = 0;
     ReadFile(deviceHandle, buffer, bytesToRead, &read, NULL);
-    return (int) read;
+    return (int32_t) read;
 #else
 	return read(deviceHandle, buffer, bytesToRead); 
 #endif
@@ -245,7 +245,7 @@ bool checkForString(char* buf, int16_t start, const char* key) {
 bool openSerial(void) {
     char     buf[512] = {'\0'};
     char     devName[256] = {'\0'};
-    int16_t  total;
+    int32_t  total;
     int16_t  labelPos;
 
     //open device name
@@ -271,7 +271,7 @@ bool openSerial(void) {
 
     //read programmer's message
     total = waitForSerialPrompt(buf, 512, 3000);
-    buf[total] = 0;
+    buf[total] = '\0';
 
     //check we are communicating with Afterburner programmer
     labelPos = strstr(buf, "AFTerburner v.") -  buf;
@@ -316,11 +316,11 @@ int16_t checkPromptExists(char* buf, int16_t bufSize) {
     return -1;
 } // int16_t
 
-int16_t waitForSerialPrompt(char* buf, int16_t bufSize, int16_t maxDelay) {
+int32_t waitForSerialPrompt(char* buf, int32_t bufSize, int32_t maxDelay) {
     char*   bufStart = buf;
-    int16_t bufTotal = bufSize;
-    int16_t bufPos = 0;
-    int16_t readSize;
+    int32_t bufTotal = bufSize;
+    int32_t bufPos = 0;
+    int32_t readSize;
     char*   bufPrint = buf;
     bool    doPrint = printSerialWhileWaiting;
     
@@ -378,8 +378,8 @@ char* printBuffer(char* bufPrint, int16_t readSize) {
 } // printBuffer()
 
 bool sendBuffer(char* buf) {
-    int16_t total;
-    int16_t writeSize;
+    int32_t total;
+    int32_t writeSize;
 
     if (buf == NULL) {
         return RETV_ERROR;
@@ -399,15 +399,16 @@ bool sendBuffer(char* buf) {
     return RETV_OK;
 } // sendBuffer()
 
-bool sendLine(char* buf, int16_t bufSize, int16_t maxDelay) {
-    int16_t total;
-    char* obuf = buf;
+int32_t sendLine(char* buf, int32_t bufSize, int32_t maxDelay) {
+    int32_t total;
+    char*   obuf = buf;
 
     if (serialF == INVALID_HANDLE) {
-        return RETV_ERROR;
+        return -1;
     }
+	
     if (sendBuffer(buf) != RETV_OK) {
-        return RETV_ERROR;
+        return -1;
     }
 
     total = waitForSerialPrompt(obuf, bufSize, (maxDelay < 0) ? 6 : maxDelay);
